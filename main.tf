@@ -1,32 +1,10 @@
 ##############################################################################
-# IBM Cloud Provider
-##############################################################################
-
-provider "ibm" {
-  ibmcloud_api_key = var.ibmcloud_api_key
-  region           = var.region
-  ibmcloud_timeout = 60
-}
-
-##############################################################################
-
-##############################################################################
-# Resource Group where VPC Resources Will Be Created
-##############################################################################
-
-data "ibm_resource_group" "resource_group" {
-  name = var.resource_group
-}
-
-##############################################################################
-
-##############################################################################
 # Create VPC
 ##############################################################################
 
 resource "ibm_is_vpc" "vpc" {
   name                        = var.vpc_name == null ? "${var.prefix}-vpc" : var.vpc_name
-  resource_group              = data.ibm_resource_group.resource_group.id
+  resource_group              = var.resource_group_id
   classic_access              = var.classic_access
   address_prefix_management   = var.use_manual_address_prefixes == false ? null : "manual"
   default_network_acl_name    = var.default_network_acl_name
@@ -77,7 +55,7 @@ module "network_acls" {
   network_acls = [
     # Add resource group ID to network ACL objects
     for network_acl in var.network_acls :
-    merge(network_acl, { resource_group_id : data.ibm_resource_group.resource_group.id })
+    merge(network_acl, { resource_group_id : var.resource_group_id })
   ]
 }
 
@@ -92,7 +70,7 @@ module "public_gateways" {
   prefix            = var.prefix
   vpc_id            = ibm_is_vpc.vpc.id
   region            = var.region
-  resource_group_id = data.ibm_resource_group.resource_group.id
+  resource_group_id = var.resource_group_id
   public_gateways   = var.use_public_gateways
 }
 
@@ -106,7 +84,7 @@ module "subnets" {
   source                      = "github.com/Cloud-Schematics/vpc-subnet-module"
   prefix                      = var.prefix
   region                      = var.region
-  resource_group_id           = data.ibm_resource_group.resource_group.id
+  resource_group_id           = var.resource_group_id
   tags                        = var.tags
   vpc_id                      = ibm_is_vpc.vpc.id
   use_manual_address_prefixes = var.use_manual_address_prefixes
@@ -125,7 +103,7 @@ module "subnets" {
 module "security_groups" {
   source            = "github.com/Cloud-Schematics/vpc-security-group-module"
   prefix            = var.prefix
-  resource_group_id = data.ibm_resource_group.resource_group.id
+  resource_group_id = var.resource_group_id
   tags              = var.tags
   vpc_id            = ibm_is_vpc.vpc.id
   security_groups   = var.security_groups
@@ -152,10 +130,10 @@ module "gateway_subnets" {
 module "vpn_gateway" {
   source            = "github.com/Cloud-Schematics/vpc-vpn-gateway-module"
   prefix            = var.prefix
-  resource_group_id = data.ibm_resource_group.resource_group.id
+  resource_group_id = var.resource_group_id
   tags              = var.tags
   vpc_id            = ibm_is_vpc.vpc.id
-  subnet_id         = module.gateway_subnets.subnets[0].id
+  subnet_id         = lookup(var.vpn_gateway, "use_vpn_gateway", null) == true ? module.gateway_subnets.subnets[0].id : null
   vpn_gateway       = var.vpn_gateway
 }
 
